@@ -8,13 +8,14 @@ import nest_asyncio
 nest_asyncio.apply()
 
 # Channel mappings for different categories
+# Channel mappings for different categories
 CHANNELS = {
     "PREDVD": [-1002155271116,-1002142404532],
     "HD": [-1002034649098],
     "WEBSERIES": [-1002134895451],  # Example channel for WebSeries
     "CWC": [-1002597802363],        # Example channel for CWC
     "ANIME": [-1001925884031],      # Example channel for Anime
-    "HOLLYWOOD": [-1002053359396]   # Example channel for Hollywood
+    "HOLLYWOOD": [-1002053359396] 
 }
 
 # Fixed channels for additional notification
@@ -247,60 +248,95 @@ async def handle_type_selection(update: Update, context: ContextTypes.DEFAULT_TY
 
     user_id = query.from_user.id
     category = query.data.upper()
-    logging.debug(f"Callback data received: {category}")
-
+    
     if user_id not in user_movie_data or "image" not in user_movie_data[user_id]:
-        await query.edit_message_text("*Please complete the previous steps first.*", parse_mode="Markdown")
+        await query.edit_message_text("*Session expired. Please start over.*", parse_mode="Markdown")
         return
 
     movie_data = user_movie_data[user_id]
-    base_caption = generate_movie_post(movie_data["title"], movie_data["link"], movie_data["permanent_link"], category)
+    base_caption = generate_movie_post(movie_data["title"], movie_data["link"], movie_data["permanent_link"])
     image = movie_data["image"]
     title = movie_data["title"]
 
-    # Send to the bot itself first
-    try:
-        await context.bot.send_photo(
-            chat_id=user_id, 
-            photo=image, 
-            caption=f"*Here's the post that was sent to channels:*\n\n{base_caption}",
-            parse_mode="Markdown"
-        )
-        logging.info("Post successfully forwarded to the bot itself")
-    except Exception as e:
-        logging.error(f"Failed to forward to bot itself: {str(e)}")
-
-    # Send to category-specific channels if they exist
-    if category in CHANNELS:
-        for channel in CHANNELS[category]:
+    # SPECIAL FIX FOR HOLLYWOOD CATEGORY
+    if category == "HOLLYWOOD":
+        # 1. First send to Hollywood main channel
+        for channel in CHANNELS.get("HOLLYWOOD", []):
             try:
                 await context.bot.send_photo(
-                    chat_id=channel, 
-                    photo=image, 
-                    caption=base_caption, 
+                    chat_id=channel,
+                    photo=image,
+                    caption=base_caption,
                     parse_mode="Markdown"
                 )
-                logging.info(f"Base caption successfully forwarded to {category} channel: {channel}")
+                logging.info(f"Successfully sent to Hollywood main channel: {channel}")
             except Exception as e:
-                logging.error(f"Failed to forward to {category} channel {channel}: {str(e)}")
+                logging.error(f"Failed to send to Hollywood main channel {channel}: {str(e)}")
 
-    # Send the additional message to fixed channels
-    additional_message = generate_additional_message(title, category)
-    for fixed_channel in FIXED_CHANNELS:
-        try:
-            await context.bot.send_photo(
-                chat_id=fixed_channel, 
-                photo=image, 
-                caption=additional_message, 
-                parse_mode="Markdown"
-            )
-            logging.info(f"Additional {category} message forwarded to fixed channel: {fixed_channel}")
-        except Exception as e:
-            logging.error(f"Failed to forward additional {category} message to fixed channel {fixed_channel}: {str(e)}")
+        # 2. Create Hollywood-specific fixed channel message
+        hollywood_fixed_message = f"""
+🎬 *{title}* 
 
-    await query.edit_message_text("*Post successfully forwarded to the relevant channels!*", parse_mode="Markdown")
+*Download Full Hollywood Movie From Below Channel* ⬇️⬇️⬇️
+
+🔹https://t.me/+Yk_I2U86MLBkNGY1
+🔹https://t.me/+Yk_I2U86MLBkNGY1
+🔹https://t.me/+Yk_I2U86MLBkNGY1
+"""
+        
+        # 3. Send to all fixed channels
+        for fixed_channel in FIXED_CHANNELS:
+            try:
+                await context.bot.send_photo(
+                    chat_id=fixed_channel,
+                    photo=image,
+                    caption=hollywood_fixed_message,
+                    parse_mode="Markdown"
+                )
+                logging.info(f"Successfully sent Hollywood message to fixed channel: {fixed_channel}")
+            except Exception as e:
+                logging.error(f"Failed to send Hollywood message to fixed channel {fixed_channel}: {str(e)}")
+
+    else:
+        # Normal processing for other categories
+        additional_message = generate_additional_message(title, category)
+        
+        # Send to category channels
+        if category in CHANNELS:
+            for channel in CHANNELS[category]:
+                try:
+                    await context.bot.send_photo(
+                        chat_id=channel,
+                        photo=image,
+                        caption=base_caption,
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to send to {category} channel {channel}: {str(e)}")
+
+        # Send to fixed channels
+        for fixed_channel in FIXED_CHANNELS:
+            try:
+                await context.bot.send_photo(
+                    chat_id=fixed_channel,
+                    photo=image,
+                    caption=additional_message,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logging.error(f"Failed to send to fixed channel {fixed_channel}: {str(e)}")
+
+    # Send confirmation to user
+    await context.bot.send_photo(
+        chat_id=user_id,
+        photo=image,
+        caption=f"*Here's your post that was sent:*\n\n{base_caption}",
+        parse_mode="Markdown"
+    )
+
+    await query.edit_message_text("*✅ Post successfully forwarded to all channels!*", parse_mode="Markdown")
     del user_movie_data[user_id]
-
+        
 async def main():
     application = Application.builder().token("7376591969:AAEMIUTiB2Tusp2B8pVroM17B7QJUeLUDLQ").build()
 
